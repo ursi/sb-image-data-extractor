@@ -5,6 +5,7 @@ module Protobuf exposing
     , encode
     , encodeImage
     , findImages
+    , getImages
     , getVids
     , parse
     )

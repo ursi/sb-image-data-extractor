@@ -1,15 +1,14 @@
 module Main exposing (..)
 
 import Browser exposing (Document)
-import Debug exposing (log)
 import Html as H exposing (Html)
 import Html.Attributes as A
 import Html.Events as E
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as En exposing (Value)
+import Node.Console as Console exposing (log)
 import Node.Fs as Fs
 import Node.Path as Path
-import Ports
 import Protobuf exposing (Image, Pb)
 import Task exposing (Task)
 
@@ -46,18 +45,69 @@ init dirname =
 
 
 type Msg
-    = DataReceived String
-    | JsonReceived Pb
-    | PortError D.Error
-    | TransformFiles
-    | FilesTransformed
+    = TransformFiles
+    | TaskFinished
+    | TrimFat
+    | JsonReceived (Result D.Error Pb)
+    | Execute (List (Cmd Msg))
     | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        FilesTransformed ->
+        Execute cmds ->
+            ( model, Cmd.batch cmds )
+
+        JsonReceived result ->
+            case result of
+                Ok body ->
+                    let
+                        _ =
+                            log <|
+                                En.array Protobuf.encodeImage <|
+                                    Protobuf.getImages body
+                    in
+                    ( model, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        TrimFat ->
+            ( model
+            , ensureDir (imagePath model)
+                |> Task.andThen
+                    (\_ ->
+                        jsonPath model
+                            |> Fs.readdir
+                            |> Task.andThen
+                                (List.map
+                                    (\file ->
+                                        Path.join [ jsonPath model, file ]
+                                            |> Fs.readFile
+                                            |> Task.andThen
+                                                (\json ->
+                                                    case D.decodeString Protobuf.decode json of
+                                                        Ok value ->
+                                                            Task.succeed value
+
+                                                        Err error ->
+                                                            Task.fail error
+                                                )
+                                            |> Task.andThen
+                                                (Protobuf.getImages
+                                                    >> En.array Protobuf.encodeImage
+                                                    >> En.encode 0
+                                                    >> Fs.writeFile (Path.join [ model, "images", file ])
+                                                )
+                                    )
+                                    >> Task.sequence
+                                )
+                    )
+                |> Task.attempt (\_ -> TaskFinished)
+            )
+
+        TaskFinished ->
             let
                 _ =
                     Debug.log "done" ()
@@ -72,19 +122,8 @@ update msg model =
 
                 path file =
                     Path.join [ basePath, file ]
-
-                jsonPath =
-                    Path.join [ model, "json" ]
               in
-              Fs.exists jsonPath
-                |> Task.andThen
-                    (\exists ->
-                        if not exists then
-                            Fs.mkdir jsonPath
-
-                        else
-                            Task.succeed ()
-                    )
+              ensureDir (jsonPath model)
                 |> Task.andThen
                     (\_ ->
                         basePath
@@ -106,7 +145,7 @@ update msg model =
                                             |> Task.andThen
                                                 (Fs.writeFile <|
                                                     Path.join
-                                                        [ jsonPath
+                                                        [ jsonPath model
                                                         , String.replace ".txt" ".json" file
                                                         ]
                                                 )
@@ -114,40 +153,34 @@ update msg model =
                                     >> Task.sequence
                                 )
                     )
-                |> Task.attempt (\_ -> NoOp)
+                |> Task.attempt (\_ -> TaskFinished)
             )
-
-        JsonReceived body ->
-            -- ( model, logValue <| encodeBody body )
-            -- ( model, logValue <| E.list E.string <| getVids body )
-            -- ( model, logValue <| E.array encodeImage <| getNakedImages body )
-            -- ( model, logValue <| E.array encodeImage <| getImages body )
-            ( model
-            , Cmd.batch
-                [ Ports.logValue <|
-                    En.list Protobuf.encodeImage <|
-                        Protobuf.findImages [ "auraduskwing" ]
-                            body
-                , Ports.logValue <|
-                    En.list En.string <|
-                        Protobuf.getVids body
-                ]
-            )
-
-        DataReceived data ->
-            ( model
-            , Ports.toJson <| Protobuf.parse data
-            )
-
-        PortError error ->
-            let
-                _ =
-                    Debug.log "port error" error
-            in
-            ( model, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
+
+
+jsonPath : Model -> String
+jsonPath dirname =
+    Path.join [ dirname, "json" ]
+
+
+imagePath : Model -> String
+imagePath dirname =
+    Path.join [ dirname, "images" ]
+
+
+ensureDir : String -> Task D.Error ()
+ensureDir path =
+    Fs.exists path
+        |> Task.andThen
+            (\exists ->
+                if not exists then
+                    Fs.mkdir path
+
+                else
+                    Task.succeed ()
+            )
 
 
 
@@ -156,18 +189,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Ports.in_
-        (\msg ->
-            case msg of
-                Ports.DataReceived str ->
-                    DataReceived str
-
-                Ports.JsonReceived pb ->
-                    JsonReceived pb
-
-                Ports.Error error ->
-                    PortError error
-        )
+    Sub.none
 
 
 
@@ -177,5 +199,13 @@ subscriptions _ =
 view : Model -> Document Msg
 view model =
     { title = ""
-    , body = [ H.button [ E.onClick TransformFiles ] [ H.text "transform files" ] ]
+    , body =
+        [ makeButton "transfrom files" TransformFiles
+        , makeButton "trim fat" TrimFat
+        ]
     }
+
+
+makeButton : String -> Msg -> Html Msg
+makeButton text msg =
+    H.div [] [ H.button [ E.onClick msg ] [ H.text text ] ]
