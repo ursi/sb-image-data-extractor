@@ -49,16 +49,12 @@ type Msg
     | TaskFinished
     | TrimFat
     | JsonReceived (Result D.Error Pb)
-    | Execute (List (Cmd Msg))
     | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Execute cmds ->
-            ( model, Cmd.batch cmds )
-
         JsonReceived result ->
             case result of
                 Ok body ->
