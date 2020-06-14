@@ -1,7 +1,6 @@
 {
     "type": "application",
     "source-directories": [
-        "elm-stuff/gitdeps/github.com/ursi/elm-css.git/src",
         "elm-stuff/gitdeps/github.com/ursi/jim-node.git/src",
         "elm-stuff/gitdeps/github.com/ursi/jim.git/src",
         "src"
