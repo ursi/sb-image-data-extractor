@@ -4,12 +4,9 @@
     "build": "electron-packager dist --overwrite"
   },
   "devDependencies": {
-    "@babel/core": "^7.9.0",
-    "@babel/preset-env": "^7.9.0",
     "electron": "^8.2.0",
     "elm-debug-transformer": "^1.0.4",
     "gulp": "^4.0.2",
-    "gulp-babel": "^8.0.0",
     "gulp-elm": "github:ursi/gulp-elm#quote",
     "gulp-rename": "^2.0.0"
   }

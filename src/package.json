@@ -9,5 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {}
+  "dependencies": {
+    "@ursi/jim": "^0.2.1",
+    "@ursi/support": "^1.0.1",
+    "jim-node": "github:ursi/jim-node#0.1.0"
+  }
 }

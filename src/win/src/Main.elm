@@ -1,22 +1,30 @@
 module Main exposing (..)
 
+import Browser exposing (Document)
 import Debug exposing (log)
+import Html as H exposing (Html)
+import Html.Attributes as A
+import Html.Events as E
 import Json.Decode as D exposing (Decoder)
-import Json.Encode as E exposing (Value)
+import Json.Encode as En exposing (Value)
+import Node.Fs as Fs
+import Node.Path as Path
 import Ports
 import Protobuf exposing (Image, Pb)
+import Task exposing (Task)
 
 
 todo =
     Debug.todo ""
 
 
-main : Program () Model Msg
+main : Program String Model Msg
 main =
-    Platform.worker
+    Browser.document
         { init = init
         , update = update
         , subscriptions = subscriptions
+        , view = view
         }
 
 
@@ -25,12 +33,12 @@ main =
 
 
 type alias Model =
-    ()
+    String
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( (), Cmd.none )
+init : String -> ( Model, Cmd Msg )
+init dirname =
+    ( dirname, Cmd.none )
 
 
 
@@ -41,12 +49,74 @@ type Msg
     = DataReceived String
     | JsonReceived Pb
     | PortError D.Error
+    | TransformFiles
+    | FilesTransformed
     | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        FilesTransformed ->
+            let
+                _ =
+                    Debug.log "done" ()
+            in
+            ( model, Cmd.none )
+
+        TransformFiles ->
+            ( model
+            , let
+                basePath =
+                    Path.join [ model, "bpb" ]
+
+                path file =
+                    Path.join [ basePath, file ]
+
+                jsonPath =
+                    Path.join [ model, "json" ]
+              in
+              Fs.exists jsonPath
+                |> Task.andThen
+                    (\exists ->
+                        if not exists then
+                            Fs.mkdir jsonPath
+
+                        else
+                            Task.succeed ()
+                    )
+                |> Task.andThen
+                    (\_ ->
+                        basePath
+                            |> Fs.readdir
+                            |> Task.andThen
+                                (List.map
+                                    (\file ->
+                                        file
+                                            |> path
+                                            |> Fs.readFile
+                                            |> Task.map
+                                                (\a ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "file" file
+                                                    in
+                                                    En.encode 0 <| Protobuf.parse a
+                                                )
+                                            |> Task.andThen
+                                                (Fs.writeFile <|
+                                                    Path.join
+                                                        [ jsonPath
+                                                        , String.replace ".txt" ".json" file
+                                                        ]
+                                                )
+                                    )
+                                    >> Task.sequence
+                                )
+                    )
+                |> Task.attempt (\_ -> NoOp)
+            )
+
         JsonReceived body ->
             -- ( model, logValue <| encodeBody body )
             -- ( model, logValue <| E.list E.string <| getVids body )
@@ -55,11 +125,11 @@ update msg model =
             ( model
             , Cmd.batch
                 [ Ports.logValue <|
-                    E.list Protobuf.encodeImage <|
+                    En.list Protobuf.encodeImage <|
                         Protobuf.findImages [ "auraduskwing" ]
                             body
                 , Ports.logValue <|
-                    E.list E.string <|
+                    En.list En.string <|
                         Protobuf.getVids body
                 ]
             )
@@ -99,3 +169,13 @@ subscriptions _ =
                     PortError error
         )
 
+
+
+-- VIEW
+
+
+view : Model -> Document Msg
+view model =
+    { title = ""
+    , body = [ H.button [ E.onClick TransformFiles ] [ H.text "transform files" ] ]
+    }

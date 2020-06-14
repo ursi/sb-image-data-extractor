@@ -19,12 +19,12 @@ type Msg
 
 toJson : Value -> Cmd msg
 toJson =
-    out "toJson"
+    out "ToJson"
 
 
 logValue : Value -> Cmd msg
 logValue =
-    out "logValue"
+    out "LogValue"
 
 
 out : String -> Value -> Cmd msg

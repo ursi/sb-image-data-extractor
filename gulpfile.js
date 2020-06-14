@@ -1,5 +1,4 @@
 const
-	gulpBabel = require(`gulp-babel`),
 	gulpElm = require(`gulp-elm`),
 	gulpRename = require(`gulp-rename`),
 	{
@@ -14,7 +13,7 @@ const
 	globs = {};
 
 globs.copy = [input + `**`, ...[
-	`win/web-modules/**`,
+	`node_modules/**`,
 	`**/*.elm`,
 	`win/elm-stuff/**`,
 	`win/src/**`,
@@ -35,25 +34,12 @@ function elm() {
 		.pipe(dest(output + `win`));
 }
 
-globs.babel = input + `win/web-modules/**/*.js`;
-function babel() {
-	return src(globs.babel)
-		.pipe(gulpBabel({plugins: [`@babel/plugin-transform-modules-commonjs`]}))
-		.pipe(dest(output + `win/web-modules`));
-}
-
-const build =
-	parallel
-		( copy
-		, elm
-		, babel
-		);
+const build = parallel(copy , elm);
 
 async function watchFiles() {
 	const cry = {usePolling: true};
 	watch(globs.copy, cry, copy);
 	watch(input + `win/src/**/*.elm`, cry, elm);
-	watch(globs.babel, babel);
 }
 
 exports.default = parallel(build, watchFiles);

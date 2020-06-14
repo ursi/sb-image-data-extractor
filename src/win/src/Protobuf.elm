@@ -11,6 +11,7 @@ module Protobuf exposing
 
 import Array exposing (Array)
 import Dict exposing (Dict)
+import Json
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E exposing (Value)
 import Parser as P exposing ((|.), (|=), Parser, Step(..))
@@ -22,7 +23,7 @@ type alias Pb =
 
 
 type alias Body =
-    { properties : Dict String String
+    { properties : Dict String Json.Value
     , objects : List Object
     }
 
@@ -56,6 +57,8 @@ decode =
     decodeBody
 
 
+{-| find all images corresponding to a list of vids
+-}
 findImages : List String -> Body -> List Image
 findImages objects body =
     Array.foldr
@@ -101,10 +104,14 @@ getImages body =
         |> List.foldl
             (\(Object head body2) images ->
                 case Dict.get "vid" body2.properties of
-                    Just vid ->
+                    Just vidValue ->
+                        let
+                            vid =
+                                Json.toString vidValue
+                        in
                         if head == "animatedImageDesc" then
                             getImagesHelper
-                                (String.replace "\"" "" vid)
+                                vid
                                 body2.objects
                                 images
 
@@ -130,11 +137,11 @@ getImagesHelper vid objects =
         >> (|>) objects
 
 
-addVid : String -> Dict String String -> Array Image -> Array Image
+addVid : String -> Dict String Json.Value -> Array Image -> Array Image
 addVid vid properties images =
     properties
         |> Dict.get "uiid"
-        |> Maybe.andThen String.toInt
+        |> Maybe.andThen Json.toInt
         |> Maybe.andThen
             (\uiid ->
                 images
@@ -183,9 +190,9 @@ getNakedImages { objects } =
         |> Array.fromList
 
 
-getAndToInt : String -> Dict String String -> Maybe Int
+getAndToInt : String -> Dict String Json.Value -> Maybe Int
 getAndToInt =
-    Dict.get >> (<<) (Maybe.andThen String.toInt)
+    Dict.get >> (<<) (Maybe.andThen Json.toInt)
 
 
 getVids : Body -> List String
@@ -195,7 +202,7 @@ getVids { properties, objects } =
         |> List.concat
         |> (properties
                 |> Dict.get "vid"
-                |> Maybe.map (String.replace "\"" "")
+                |> Maybe.map Json.toString
                 |> Maybe.map (::)
                 |> Maybe.withDefault identity
            )
@@ -211,6 +218,9 @@ parseData data =
             let
                 _ =
                     Debug.log "error" error
+
+                _ =
+                    Debug.log "data" data
             in
             E.string "error"
 
@@ -218,7 +228,7 @@ parseData data =
 encodeBody : Body -> Value
 encodeBody { properties, objects } =
     E.object
-        [ ( "properties", E.dict identity E.string properties )
+        [ ( "properties", E.dict identity Json.encode properties )
         , ( "objects", E.list encodeObject objects )
         ]
 
@@ -259,7 +269,7 @@ parseBody =
                                     | properties =
                                         Dict.insert
                                             (String.trim p)
-                                            (String.trim v)
+                                            (Json.fromString <| String.trim v)
                                             body.properties
                                 }
                         )
@@ -302,7 +312,7 @@ notBraceOrColon c =
 decodeBody : Decoder Body
 decodeBody =
     D.map2 Body
-        (D.field "properties" <| D.dict D.string)
+        (D.field "properties" <| D.dict Json.decoder)
         (D.field "objects" <| D.list <| D.lazy (\_ -> decodeObject))
 
 
