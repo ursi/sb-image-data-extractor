@@ -34,7 +34,8 @@ type Object
 
 
 type alias Image =
-    { x : Int
+    { uiid : Int
+    , x : Int
     , y : Int
     , w : Int
     , h : Int
@@ -161,7 +162,8 @@ addVid vid properties images =
 encodeImage : Image -> Value
 encodeImage image =
     E.object
-        [ ( "x", E.int image.x )
+        [ ( "uiid", E.int image.uiid )
+        , ( "x", E.int image.x )
         , ( "y", E.int image.y )
         , ( "w", E.int image.w )
         , ( "h", E.int image.h )
@@ -179,7 +181,7 @@ getNakedImages { objects } =
                 sheetDef.objects
                     |> List.map
                         (\(Object _ imageDef) ->
-                            Maybe.map4 (\x y w h -> Image x y w h i Set.empty)
+                            Maybe.map4 (\x y w h -> Image -1 x y w h i Set.empty)
                                 (getAndToInt "x" imageDef.properties)
                                 (getAndToInt "y" imageDef.properties)
                                 (getAndToInt "w" imageDef.properties)
@@ -188,6 +190,7 @@ getNakedImages { objects } =
                     |> List.filterMap identity
             )
         |> List.concat
+        |> List.indexedMap (\i image -> { image | uiid = i })
         |> Array.fromList
 
 
